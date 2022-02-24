@@ -15,6 +15,7 @@ python train.py --exp_name exp_snippet_<lang1>_<lang2> --dump_path dumppath1 --d
 ```
 
 Program Translation:
+
 Replace the "snippet_data" with "program_data" in data_path. Note that you may want to change the exp_name accordingly also.
 
 MuST Training:
@@ -28,6 +29,7 @@ python train.py --exp_name all_2_Java --dump_path dumppath1 --data_path all_2_on
 ```
 
 Evaluation:
+
 Change "--eval_only" in the training command from false to true.
 
 
