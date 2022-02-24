@@ -6,9 +6,10 @@ The code is adapted from https://github.com/facebookresearch/CodeGen
 
 ### Train the model
 First get the checkpoint
-'''
+```
 wget https://dl.fbaipublicfiles.com/transcoder/pre_trained_models/dobf_plus_denoising.pth
-'''
+```
+
 
 
 ## Data
