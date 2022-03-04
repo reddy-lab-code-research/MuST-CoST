@@ -41,30 +41,6 @@ from codegen_sources.model.src.data.dictionary import (
 )
 import pickle
 
-# compilation classifier
-artifacts_path="/home/mingzhu/CodeModel/CodeGen/code_corrption/sliding_window_segmented/"
-artifacts_path1="/home/mingzhu/CodeModel/CodeGen/code_corrption/last_token_segmented/"
-artifacts_path2="/home/mingzhu/CodeModel/CodeGen/code_corrption/codenet_unaccepted/"
-
-java_cls_path=artifacts_path + "java"
-
-# java_cls_path=artifacts_path + "java"
-py_cls_path=artifacts_path + "py"
-cpp_cls_path=artifacts_path + "cpp"
-cs_cls_path=artifacts_path + "cs"
-
-# Token type dicts
-token_type_path = "/home/mingzhu/CodeModel/CodeGen/token_type/new_codenet_tokenized_data/"
-path_token = token_type_path + "token2type.pickle"
-path_type = token_type_path + "type2token.pickle"
-path_bpe = token_type_path + "token2bpe.pickle"
-
-with open(path_token, 'rb') as infile:
-    dic_token = pickle.load(infile)
-with open(path_type, 'rb') as infile:
-    dic_type = pickle.load(infile)
-with open(path_bpe, 'rb') as infile:
-    dic_bpe = pickle.load(infile)
 
 
 EVAL_OBF_PROBAS = []
@@ -858,120 +834,7 @@ class SingleEvaluator(Evaluator):
             self.classifier = trainer.classifier
 
 
-import re
-def fix_format(y):
-    y = y.replace(" @ @", "@@").replace("@ @", "@@")
-    x = re.sub('[\n]{2,}','\n',y)
-    xs = x.split('\n')
-#     remove empty lines
-    s = "\n".join([t for t in xs if len(t.strip()) > 0])
-#     remove linebreak between ()
-    s = re.sub(r'\n(?=[^()]*\))', '', s)
-#     remove linebreak between []
-    s = re.sub(r'\n(?=[^\[\]]*\])', '', s)
-    s = re.sub(r'[\t| ]+(?=[^()]*\))', ' ', s)
-    s = re.sub(r'[\t| ]+(?=[^\[\]]*\])', ' ', s)
-#     reduce unnecessary black space
-    s = re.sub('[ ]{2,}',' ',s)
-    return s
 
-import numpy as np
-def detok_orig(x2, dico, detokenizer):
-#     x2: bs * candidates * seq_len
-    tok = []
-    bz = x2.shape[0]
-    cand_size = x2.shape[1]
-    seq_len = x2.shape[2]
-    for i in range(bz):
-        tok_cand = []
-        for j in range(cand_size):
-            wid = [dico[x2[i, j, k].item()] for k in range(seq_len)][1:]
-#                 print("wid", wid)
-            wid = wid[: wid.index(EOS_WORD)] if EOS_WORD in wid else wid
-            dec_seq = " ".join(wid).replace("@@ ", "")
-#                 print("dec_seq", dec_seq)
-            detoc_seq = detokenizer(dec_seq)
-#                 print("detoc_seq",detoc_seq)
-            fixed_seq = fix_format(detoc_seq)
-#                 print("fixed_seq",fixed_seq)
-            tok_cand.append(fixed_seq)
-
-        tok.append(tok_cand)
-    tok_nd = np.asarray(tok)
-    return tok_nd
-
-def is_define_java(line):
-    lang_dic_token = dic_token["Java"]
-    tokens = line.strip().split()
-    flag = False
-    if tokens[0] not in lang_dic_token:
-        return flag
-    elif lang_dic_token[tokens[0]][0] == "identifier":
-        bad_cases_identifier = set(['tree', 'System', 'dfs'])
-        if tokens[0] not in bad_cases_identifier:
-            if tokens[0][0].isupper():
-                if len(tokens) > 1:
-                    if tokens[1] == '.':
-                        return flag
-                if len(tokens) > 2:
-                    if tokens[1] == '[' and tokens[2] != ']':
-                        return flag
-                flag = True
-    elif lang_dic_token[tokens[0]][0] == "keyword" :
-        good_cases_keyword = set(['boolean', 'char', 'class', 'double', 
-                                  'final', 'float', 'int', 'long', 'new', 
-                                  'private', 'public', 'static', 'void', 'this'])
-        if tokens[0] in good_cases_keyword:
-            flag = True
-    return flag
-
-
-def detok(x2, dico, detokenizer):
-#     x2: bs * num_of_candidates
-    lang_dic_token = dic_token["Java"]
-    batch_candidates = []
-    batch_candidates_tokens = []
-    batch_candidate_score = []
-    bz = x2.shape[0]
-    cand_size = x2.shape[1]
-    seq_len = x2.shape[2]
-    scores = []
-    for i in range(bz):
-        detoked_candidates = []
-        candidates_tokens = []
-        cand_scores = []
-        for j in range(cand_size):
-            wid = [dico[x2[i, j, k].item()] for k in range(seq_len)][1:]
-            dec_tok_list = wid[: wid.index(EOS_WORD)] if EOS_WORD in wid else wid
-            last_token = dec_tok_list[-1]
-            dec_seq = " ".join(dec_tok_list).replace("@@ ", "")
-            detoc_seq = detokenizer(dec_seq)
-            fixed_seq = fix_format(detoc_seq)
-            last_line = fixed_seq.strip().split("\n")[-1]
-            line_tokens = last_line.split()
-            score = 1.0
-            
-            # 这里判断identifier可能有些问题，因为string也会有@@
-            if (last_token in lang_dic_token and 
-                lang_dic_token[last_token] == "identifier") or ((last_token.endswith("@@") 
-                                                                or dec_tok_list[-2].endswith("@@")) 
-                                                                and "\"" not in last_line
-                                                                and "\'" not in last_line):
-                if not is_define_java(last_line):
-                    if last_token not in dec_tok_list[:-1]:
-                        score = 0.0
-                    else:
-                        score = 1.5
-
-            cand_scores.append(score)
-            candidates_tokens.append(dec_tok_list)
-            detoked_candidates.append(fixed_seq)
-        scores.append(cand_scores)
-        batch_candidates.append(detoked_candidates)
-        batch_candidates_tokens.append(candidates_tokens)
-    batch_candidates_nd = np.asarray(batch_candidates)
-    batch_candidates_tokens_nd = np.asarray(batch_candidates_tokens)
-    return batch_candidates_nd, scores
             
 class EncDecEvaluator(Evaluator):
     def __init__(self, trainer, data, params):
@@ -982,10 +845,7 @@ class EncDecEvaluator(Evaluator):
         self.encoder = trainer.encoder
         self.decoder = trainer.decoder
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.cls_models = {"java": Classifier(java_cls_path, device), "python":Classifier(py_cls_path, device),
-                          "cpp":Classifier(cpp_cls_path, device), "csharp":Classifier(cs_cls_path, device)}
         
-            
 # precondition_topk = 10, condition_lambda = 0.5,
     def evaluate_mt(
         self,
@@ -1026,24 +886,6 @@ class EncDecEvaluator(Evaluator):
 
         lang1_id = params.lang2id[lang1]
         lang2_id = params.lang2id[lang2]
-        
-#         Added for conditional generation
-        so_path = "/home/mingzhu/CodeModel/CodeGen/codegen_sources/preprocessing/lang_processors"
-#         src_lang_processor = LangProcessor.processors[lang1](
-#             root_folder=so_path
-#         )
-#         tokenizer = src_lang_processor.tokenize_code
-#         lang1_processor = LangProcessor.processors[lang1.split("_")[0]](
-#             root_folder=so_path
-#         )
-        print("langs", list(LangProcessor.processors.keys()))
-        lang2_format = lang2.split("_")[0]
-        if lang2_format == "csharp":
-            lang2_format = "c_sharp"
-        lang2_processor = LangProcessor.processors[lang2_format](
-            root_folder=so_path
-        )
-        detokenizer = lang2_processor.detokenize_code
         
 
 
@@ -1168,23 +1010,9 @@ class EncDecEvaluator(Evaluator):
                                 dim=1
                             )
                         else:
-#                             The conditional generation for beam 1
-                            if cont:
-                                generated, lengths = decoder.generate_cont(
-                                    cont,
-                                    self.cls_models[lang2.split("_")[0]],
-                                    detok, 
-                                    self.dico,
-                                    detokenizer,
-                                    precondition_topk, 
-                                    condition_lambda,
-                                    max_tok_num,
-                                    enc1, len1, lang2_id, max_len=len_v
-                                )
-                            else:
-                                generated, lengths = decoder.generate(
-                                    enc1, len1, lang2_id, max_len=len_v
-                                )
+                            generated, lengths = decoder.generate(
+                                enc1, len1, lang2_id, max_len=len_v
+                            )
                         # print(f'path 1: {generated.shape}')
 
                     else:
