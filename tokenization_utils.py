@@ -2,6 +2,89 @@ from codegen_sources.model.translate import *
 from codegen_sources.model.preprocess import *
 import shutil
 from shutil import copyfile
+import os 
+
+def get_train_commands(langs, model_path, dump_path, data_path_prefix, exp_prefix, model_exp_prefix,
+                       max_epoch=200, max_len=400, beam_size=10,
+                       is_reloaded=True, is_dobf=True, is_transferred=False, is_print=True, 
+                       is_cont=False, precont_topk=0, cont_lambda=0, max_tok_num=20):
+    for lang1 in langs:
+        for lang2 in langs:
+            if lang2 == lang1:
+                continue
+            if is_print:
+                print("==============", lang1, lang2, "=============")
+            exp_name = exp_prefix + lang1 + '_' + lang2
+            data_path = data_path_prefix + lang1 + '-' + lang2 + "/"
+            if not os.path.exists(data_path):
+                data_path = data_path_prefix + lang2 + '-' + lang1 + "/"
+
+            lang_pair = lang_lower[lang1] + "_sa-" + lang_lower[lang2] + "_sa"
+            mt_steps = lang_pair
+            validation_metrics = "valid_" + lang_pair + "_mt_bleu"
+            lgs = lang_pair
+            exp_path_prefix = dump_path + exp_name + "/"
+
+            train_command = "python train.py " + \
+            "--exp_name " + exp_name + " " + \
+            "--dump_path " +  dump_path + " " + \
+            "--data_path " + data_path + " " + \
+            "--mt_steps " + mt_steps + " " + \
+            "--encoder_only False " + \
+            "--n_layers 0  " + \
+            "--lgs " + lgs  + " " + \
+            "--max_vocab 64000 " + \
+            "--gelu_activation true " + \
+            "--roberta_mode false   " + \
+            "--amp 2  " + \
+            "--fp16 true  " + \
+            "--tokens_per_batch 3000  " + \
+            "--group_by_size true " + \
+            "--max_batch_size 128  " +  \
+            "--epoch_size 10000  " +   \
+            "--split_data_accross_gpu global  " +  \
+            "--has_sentences_ids true  " + \
+            "--optimizer 'adam_inverse_sqrt,warmup_updates=10000,lr=0.0001,weight_decay=0.01'  " + \
+            "--eval_bleu true   " + \
+            "--eval_computation false   " + \
+            "--generate_hypothesis true   " + \
+            "--validation_metrics " +  validation_metrics + " " + \
+            "--eval_only false" + " " \
+            "--max_epoch " + str(max_epoch) + " " +  \
+            "--beam_size " + str(beam_size) + " " + \
+            "--max_len " + str(max_len) + " "
+            if is_dobf:
+                train_command += "--n_layers_encoder 12   " + \
+                                    "--n_layers_decoder 6  " + \
+                                    "--emb_dim 768   " + \
+                                    "--n_heads 12   "
+            else:
+                train_command += "--n_layers_encoder 6   " + \
+                                    "--n_layers_decoder 6  " + \
+                                    "--emb_dim 1024   "
+            if is_reloaded:
+                if is_transferred:
+                    # Continue training on another checkpoint
+
+                    model_exp_name = model_exp_prefix + lang1 + '_' + lang2
+                    model_exp_path_prefix = dump_path + model_exp_name + "/"
+                    if not os.path.exists(model_exp_path_prefix):
+                        continue
+                    exp_key = check_exp_path(model_exp_path_prefix, lang_pair)
+                    model_exp_path = model_exp_path_prefix + exp_key + '/'
+                    
+                    model_path = model_exp_path + "best-valid_" + lang_pair + "_mt_bleu.pth"
+                    if not os.path.exists(model_path):
+                        print(model_path)
+                        continue
+                train_command += "--reload_model " + model_path + ',' + model_path + " "
+                if is_cont:
+                    train_command += "--eval_only True --conditional_generation True  --precont_topk " + \
+                                        str(precont_topk) + " --cont_lambda " + str(cont_lambda) +\
+                                        " --max_tok_num " + str(max_tok_num)
+
+            print(train_command)
+    return
 
 def get_tokenizer(lang):
     processor = LangProcessor.processors[lang](root_folder=so_path)
@@ -62,8 +145,8 @@ def binarize(root, langs, voc_path):
                 copyfile(fn2_pth, fn2_pth_alt)
     return
 
-                
-home_path = "./"
+
+home_path = os.path.dirname(os.path.realpath(__file__)) + "/"
 so_path = home_path + "codegen_sources/preprocessing/lang_processors"
 Fast_BPE_path = home_path + "data/bpe/cpp-java-python/"
 Fast_codes = Fast_BPE_path + 'codes'
@@ -71,8 +154,9 @@ Fast_vocab = Fast_BPE_path + 'vocab'
 Roberta_BPE_path = home_path + "data/bpe/roberta-base-vocab"
 data_path = home_path + "CoST_data_release/processed_data/"
 map_data_path = data_path + "map_data/"
+snippet_data_path = data_path + "snippet_data/"
+program_data_path = data_path + "program_data/"
 evaluator_path = home_path + "CodeXGLUE/Code-Code/code-to-code-trans/evaluator/"
-
 split_dict_path = map_data_path + "split_dict.json"
 
 dump_path = home_path + "CodeGen/dumppath1/"
