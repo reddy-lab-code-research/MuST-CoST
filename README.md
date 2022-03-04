@@ -2,7 +2,7 @@
 Code and data for AAAI 2022 paper "Multilingual Code Snippets Training for Program Translation"
 
 ## Code
-The code is adapted from https://github.com/facebookresearch/CodeGen
+The code is adapted from https://github.com/facebookresearch/CodeGen. Please refer to this repo for setting up the environment.
 
 ### Data Preprocessing
 Unzip the CoST_data.zip
