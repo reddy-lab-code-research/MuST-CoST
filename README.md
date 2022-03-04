@@ -4,6 +4,12 @@ Code and data for AAAI 2022 paper "Multilingual Code Snippets Training for Progr
 ## Code
 The code is adapted from https://github.com/facebookresearch/CodeGen
 
+### Data Preprocessing
+Unzip the CoST_data.zip
+```
+python data_prepro.py
+```
+
 ### Train the model
 First get the checkpoint
 ```
